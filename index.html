@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RhythmType - Song Typing Game</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://sdk.scdn.co/spotify-player.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&family=Inter:wght@300;400;600;700&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+    }
+    .font-mono {
+      font-family: 'Fira Code', monospace;
+    }
+    .lyric-active {
+      color: #38bdf8;
+      text-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+      transform: scale(1.03);
+    }
+    .char-correct {
+      color: #4ade80;
+      border-bottom: 2px solid #22c55e;
+    }
+    .char-wrong {
+      color: #f87171;
+      background-color: rgba(239, 68, 68, 0.2);
+      border-bottom: 2px solid #ef4444;
+    }
+    .char-current {
+      background-color: #3b82f6;
+      color: #ffffff;
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-between p-4 md:p-8">
+
+  <!-- Header -->
+  <header class="w-full max-w-4xl flex justify-between items-center pb-4 border-b border-slate-800">
+    <div class="flex items-center gap-3">
+      <i class="fa-solid fa-music text-3xl text-sky-400"></i>
+      <h1 class="text-2xl font-bold bg-gradient-to-r from-sky-400 to-blue-600 bg-clip-text text-transparent">RhythmType</h1>
+    </div>
+    <div class="flex gap-4 items-center">
+      <div class="text-sm bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+        <span class="text-slate-400">WPM:</span> <span id="wpm-display" class="font-bold text-sky-400">0</span>
+      </div>
+      <div class="text-sm bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+        <span class="text-slate-400">Accuracy:</span> <span id="accuracy-display" class="font-bold text-green-400">100%</span>
+      </div>
+      <div class="text-sm bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+        <span class="text-slate-400">Score:</span> <span id="score-display" class="font-bold text-amber-400">0</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="w-full max-w-4xl my-6 flex flex-col gap-6">
+
+    <!-- Source Selector Tabs -->
+    <div class="flex border-b border-slate-800 gap-2">
+      <button id="tab-local" onclick="switchTab('local')" class="px-4 py-2 font-medium text-sm rounded-t-lg bg-slate-800 text-sky-400 border-t border-x border-slate-700">
+        <i class="fa-solid fa-file-video mr-2"></i> Local MP4 / MP3
+      </button>
+      <button id="tab-spotify" onclick="switchTab('spotify')" class="px-4 py-2 font-medium text-sm rounded-t-lg bg-slate-900 text-slate-400 hover:text-slate-200">
+        <i class="fa-brands fa-spotify mr-2"></i> Spotify Web Player
+      </button>
+    </div>
+
+    <!-- Tab 1: Local File Input (Video / Audio) -->
+    <div id="content-local" class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col gap-4">
+      <div id="drop-zone" class="border-2 border-dashed border-slate-700 hover:border-sky-500 rounded-xl p-8 text-center cursor-pointer transition-colors bg-slate-950/50">
+        <i class="fa-solid fa-cloud-arrow-up text-4xl text-slate-500 mb-3"></i>
+        <p class="text-slate-300 font-medium">Drag and drop audio or video files here</p>
+        <p class="text-xs text-slate-500 mt-1">Supports MP4, WebM, MP3, WAV, FLAC</p>
+        <input type="file" id="file-input" accept="audio/*,video/mp4,video/webm" class="hidden" onchange="handleFileSelect(event)">
+      </div>
+
+      <div class="flex flex-wrap gap-4 items-center justify-between text-xs text-slate-400">
+        <div class="flex items-center gap-2">
+          <span>Optional Custom LRC Lyrics:</span>
+          <input type="file" id="lrc-input" accept=".lrc" class="hidden" onchange="handleLrcSelect(event)">
+          <button onclick="document.getElementById('lrc-input').click()" class="bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded border border-slate-700 text-slate-300">Load .LRC File</button>
+        </div>
+        <button onclick="loadDemoTrack()" class="text-sky-400 hover:underline"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Load Synth Demo Track</button>
+      </div>
+    </div>
+
+    <!-- Tab 2: Spotify Player Controls -->
+    <div id="content-spotify" class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col gap-4 hidden">
+      <div id="spotify-login-section" class="flex flex-col gap-3">
+        <p class="text-xs text-slate-400">Paste your Spotify Client ID below and connect to stream high quality tracks directly in the browser.</p>
+        <div class="flex gap-2">
+          <input type="text" id="spotify-client-id" placeholder="Spotify Client ID" class="bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-sm flex-1 focus:outline-none focus:border-sky-500">
+          <button onclick="connectSpotify()" class="bg-green-600 hover:bg-green-500 px-4 py-2 rounded-lg text-sm font-semibold text-white flex items-center gap-2">
+            <i class="fa-brands fa-spotify"></i> Connect
+          </button>
+        </div>
+      </div>
+
+      <div id="spotify-active-section" class="hidden flex flex-col gap-4">
+        <div class="flex gap-2">
+          <input type="text" id="spotify-search-query" placeholder="Search track name or artist..." class="bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-sm flex-1 focus:outline-none focus:border-sky-500" onkeydown="if(event.key==='Enter') searchSpotifyTrack()">
+          <button onclick="searchSpotifyTrack()" class="bg-sky-600 hover:bg-sky-500 px-4 py-2 rounded-lg text-sm font-semibold">Search</button>
+        </div>
+        <div id="spotify-search-results" class="max-h-48 overflow-y-auto flex flex-col gap-2 pr-2"></div>
+      </div>
+    </div>
+
+    <!-- Media / Video Screen Container -->
+    <div id="media-container" class="relative bg-slate-950 rounded-xl border border-slate-800 overflow-hidden hidden flex justify-center items-center max-h-72">
+      <video id="video-element" class="w-full max-h-72 object-contain" playsinline></video>
+      <audio id="audio-element" class="hidden"></audio>
+    </div>
+
+    <!-- Lyrics Display Stage -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center min-h-[140px] flex flex-col justify-center gap-2 relative">
+      <div id="lyric-prev" class="text-sm text-slate-500 h-6 overflow-hidden transition-all"></div>
+      <div id="lyric-current" class="text-2xl md:text-3xl font-bold tracking-wide transition-all min-h-[40px] flex items-center justify-center">
+        <span class="text-slate-600 italic">Load a track or audio file to start playing</span>
+      </div>
+      <div id="lyric-next" class="text-sm text-slate-500 h-6 overflow-hidden transition-all"></div>
+    </div>
+
+    <!-- Typing Game Input Section -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col gap-4">
+      <div id="typing-prompt" class="font-mono text-xl md:text-2xl tracking-wider min-h-[60px] p-4 bg-slate-950 border border-slate-800 rounded-lg flex flex-wrap items-center justify-center break-all">
+        <!-- Dynamically filled char spans -->
+      </div>
+      <input type="text" id="typing-input" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-lg font-mono text-center focus:outline-none focus:border-sky-400" placeholder="Type here when lyrics appear..." disabled autocomplete="off" spellcheck="false">
+    </div>
+
+    <!-- Controls Bar -->
+    <div class="flex justify-between items-center bg-slate-900 border border-slate-800 p-4 rounded-xl">
+      <button id="btn-play-pause" onclick="togglePlayback()" class="bg-sky-600 hover:bg-sky-500 px-6 py-2.5 rounded-lg font-semibold text-sm flex items-center gap-2 disabled:opacity-50" disabled>
+        <i class="fa-solid fa-play"></i> Play
+      </button>
+      <div id="track-status" class="text-xs text-slate-400 truncate max-w-md">No media loaded</div>
+      <button onclick="resetStats()" class="text-slate-400 hover:text-white text-xs"><i class="fa-solid fa-rotate-right mr-1"></i> Reset Stats</button>
+    </div>
+
+  </main>
+
+  <footer class="text-xs text-slate-600 py-2">
+    RhythmType - Sync, Watch & Type
+  </footer>
+
+  <script>
+    // Game & State Engine
+    let currentTab = 'local';
+    let lyrics = []; // Array of { time: seconds, text: string }
+    let currentLyricIndex = -1;
+    let typedChars = [];
+    let activeMediaElement = null;
+    let animFrameReq = null;
+
+    // Spotify State
+    let spotifyPlayer = null;
+    let spotifyDeviceId = null;
+    let spotifyAccessToken = null;
+
+    // Stats
+    let totalTyped = 0;
+    let correctTyped = 0;
+    let score = 0;
+    let startTime = null;
+
+    const audioEl = document.getElementById('audio-element');
+    const videoEl = document.getElementById('video-element');
+    const typingInput = document.getElementById('typing-input');
+    const typingPrompt = document.getElementById('typing-prompt');
+
+    // Tab Switcher
+    function switchTab(tab) {
+      currentTab = tab;
+      document.getElementById('content-local').classList.toggle('hidden', tab !== 'local');
+      document.getElementById('content-spotify').classList.toggle('hidden', tab !== 'spotify');
+      document.getElementById('tab-local').className = tab === 'local' ? 'px-4 py-2 font-medium text-sm rounded-t-lg bg-slate-800 text-sky-400 border-t border-x border-slate-700' : 'px-4 py-2 font-medium text-sm rounded-t-lg bg-slate-900 text-slate-400 hover:text-slate-200';
+      document.getElementById('tab-spotify').className = tab === 'spotify' ? 'px-4 py-2 font-medium text-sm rounded-t-lg bg-slate-800 text-green-400 border-t border-x border-slate-700' : 'px-4 py-2 font-medium text-sm rounded-t-lg bg-slate-900 text-slate-400 hover:text-slate-200';
+    }
+
+    // Drag and Drop & Local Media Loader
+    const dropZone = document.getElementById('drop-zone');
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-sky-500'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('border-sky-500'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('border-sky-500');
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    dropZone.addEventListener('click', () => document.getElementById('file-input').click());
+
+    function handleFileSelect(e) {
+      if (e.target.files.length) handleFile(e.target.files[0]);
+    }
+
+    function handleFile(file) {
+      const mediaUrl = URL.createObjectURL(file);
+      const isVideo = file.type.startsWith('video/') || file.name.endsWith('.mp4') || file.name.endsWith('.webm');
+      
+      document.getElementById('media-container').classList.toggle('hidden', !isVideo);
+      
+      if (isVideo) {
+        videoEl.src = mediaUrl;
+        activeMediaElement = videoEl;
+        audioEl.pause();
+      } else {
+        audioEl.src = mediaUrl;
+        activeMediaElement = audioEl;
+        videoEl.pause();
+      }
+
+      document.getElementById('track-status').textContent = `Loaded: ${file.name}`;
+      document.getElementById('btn-play-pause').disabled = false;
+      
+      // Auto fetch lyrics via LRCLIB based on filename
+      const cleanTitle = file.name.replace(/\.[^/.]+$/, "").replace(/[\_\-]/g, " ");
+      fetchLRCLyrics(cleanTitle);
+    }
+
+    // LRC Parser
+    function parseLRC(lrcText) {
+      const lines = lrcText.split('\n');
+      const result = [];
+      const timeExp = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/;
+      
+      for (const line of lines) {
+        const match = timeExp.exec(line);
+        if (match) {
+          const minutes = parseInt(match[1]);
+          const seconds = parseInt(match[2]);
+          const millis = parseInt(match[3].padEnd(3, '0'));
+          const time = minutes * 60 + seconds + millis / 1000;
+          const text = line.replace(timeExp, '').trim();
+          if (text) result.push({ time, text });
+        }
+      }
+      return result.sort((a, b) => a.time - b.time);
+    }
+
+    function handleLrcSelect(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        lyrics = parseLRC(event.target.result);
+        document.getElementById('track-status').textContent += ' (.LRC Attached)';
+      };
+      reader.readAsText(file);
+    }
+
+    // Auto Lyrics Fetch via LRCLIB
+    async function fetchLRCLyrics(trackName, artistName = '') {
+      try {
+        const res = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(trackName + ' ' + artistName)}`);
+        const data = await res.json();
+        if (data && data.length > 0 && data[0].syncedLyrics) {
+          lyrics = parseLRC(data[0].syncedLyrics);
+          document.getElementById('track-status').textContent += ' (Lyrics Synced)';
+        } else {
+          document.getElementById('lyric-current').textContent = "No synced lyrics found. Add an .LRC file manually.";
+        }
+      } catch (err) {
+        console.error('LRCLIB Fetch Error:', err);
+      }
+    }
+
+    // Sync Engine (requestAnimationFrame)
+    function syncLoop() {
+      if (!activeMediaElement) return;
+      const currentTime = activeMediaElement.currentTime;
+      
+      let index = -1;
+      for (let i = 0; i < lyrics.length; i++) {
+        if (currentTime >= lyrics[i].time) {
+          index = i;
+        } else {
+          break;
+        }
+      }
+
+      if (index !== -1 && index !== currentLyricIndex) {
+        currentLyricIndex = index;
+        updateLyricDisplay();
+      }
+
+      animFrameReq = requestAnimationFrame(syncLoop);
+    }
+
+    function updateLyricDisplay() {
+      if (currentLyricIndex < 0 || currentLyricIndex >= lyrics.length) return;
+
+      const prev = lyrics[currentLyricIndex - 1]?.text || '';
+      const curr = lyrics[currentLyricIndex].text;
+      const next = lyrics[currentLyricIndex + 1]?.text || '';
+
+      document.getElementById('lyric-prev').textContent = prev;
+      document.getElementById('lyric-current').textContent = curr;
+      document.getElementById('lyric-next').textContent = next;
+
+      // Reset typing prompt for new lyric line
+      renderTypingPrompt(curr);
+    }
+
+    function renderTypingPrompt(targetText) {
+      typingInput.value = '';
+      typingInput.disabled = false;
+      typingInput.focus();
+      typedChars = [];
+      updatePromptUI(targetText, '');
+    }
+
+    function updatePromptUI(targetText, inputVal) {
+      typingPrompt.innerHTML = '';
+      for (let i = 0; i < targetText.length; i++) {
+        const span = document.createElement('span');
+        span.textContent = targetText[i];
+        if (i < inputVal.length) {
+          if (inputVal[i] === targetText[i]) {
+            span.className = 'char-correct';
+          } else {
+            span.className = 'char-wrong';
+          }
+        } else if (i === inputVal.length) {
+          span.className = 'char-current';
+        }
+        typingPrompt.appendChild(span);
+      }
+    }
+
+    // Typing Interaction Event Listener
+    typingInput.addEventListener('input', (e) => {
+      if (!startTime) startTime = Date.now();
+      const currentTarget = lyrics[currentLyricIndex]?.text || '';
+      const inputVal = e.target.value;
+
+      totalTyped++;
+      if (inputVal[inputVal.length - 1] === currentTarget[inputVal.length - 1]) {
+        correctTyped++;
+        score += 10;
+      }
+
+      updatePromptUI(currentTarget, inputVal);
+      calculateStats();
+    });
+
+    function calculateStats() {
+      const minutes = (Date.now() - startTime) / 60000 || 0.01;
+      const wpm = Math.round((correctTyped / 5) / minutes);
+      const accuracy = totalTyped > 0 ? Math.round((correctTyped / totalTyped) * 100) : 100;
+
+      document.getElementById('wpm-display').textContent = wpm;
+      document.getElementById('accuracy-display').textContent = `${accuracy}%`;
+      document.getElementById('score-display').textContent = score;
+    }
+
+    function togglePlayback() {
+      if (!activeMediaElement) return;
+      
+      // Explicit user gesture activation
+      if (activeMediaElement.paused) {
+        activeMediaElement.play();
+        document.getElementById('btn-play-pause').innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+        animFrameReq = requestAnimationFrame(syncLoop);
+      } else {
+        activeMediaElement.pause();
+        document.getElementById('btn-play-pause').innerHTML = '<i class="fa-solid fa-play"></i> Play';
+        cancelAnimationFrame(animFrameReq);
+      }
+    }
+
+    function resetStats() {
+      totalTyped = 0;
+      correctTyped = 0;
+      score = 0;
+      startTime = null;
+      document.getElementById('wpm-display').textContent = '0';
+      document.getElementById('accuracy-display').textContent = '100%';
+      document.getElementById('score-display').textContent = '0';
+    }
+
+    // Demo Track Generator
+    function loadDemoTrack() {
+      lyrics = [
+        { time: 0, text: "Welcome to RhythmType" },
+        { time: 3, text: "Type the words as they appear in sync" },
+        { time: 7, text: "Master your typing speed with music" }
+      ];
+      document.getElementById('track-status').textContent = "Loaded: Built-in Synth Demo";
+      document.getElementById('btn-play-pause').disabled = false;
+      currentLyricIndex = 0;
+      updateLyricDisplay();
+    }
+
+    // Spotify Integration Logic
+    function connectSpotify() {
+      const clientId = document.getElementById('spotify-client-id').value.trim();
+      if (!clientId) return alert('Please enter a Spotify Client ID');
+
+      const redirectUri = window.location.origin + window.location.pathname;
+      const scopes = 'streaming user-read-email user-read-private user-modify-playback-state';
+      
+      window.location.href = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
+    }
+
+    window.onSpotifyWebPlaybackSDKReady = () => {
+      const hash = window.location.hash.substring(1).split('&').reduce((initial, item) => {
+        if (item) {
+          var parts = item.split('=');
+          initial[parts[0]] = decodeURIComponent(parts[1]);
+        }
+        return initial;
+      }, {});
+
+      if (hash.access_token) {
+        spotifyAccessToken = hash.access_token;
+        switchTab('spotify');
+        document.getElementById('spotify-login-section').classList.add('hidden');
+        document.getElementById('spotify-active-section').classList.remove('hidden');
+
+        spotifyPlayer = new Spotify.Player({
+          name: 'RhythmType Web Player',
+          getOAuthToken: cb => { cb(spotifyAccessToken); },
+          volume: 0.8
+        });
+
+        spotifyPlayer.addListener('ready', ({ device_id }) => {
+          console.log('Ready with Device ID', device_id);
+          spotifyDeviceId = device_id;
+        });
+
+        spotifyPlayer.addListener('not_ready', ({ device_id }) => {
+          console.log('Device ID has gone offline', device_id);
+        });
+
+        spotifyPlayer.connect();
+      }
+    };
+
+    async function searchSpotifyTrack() {
+      const query = document.getElementById('spotify-search-query').value.trim();
+      if (!query || !spotifyAccessToken) return;
+
+      const res = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=5`, {
+        headers: { 'Authorization': `Bearer ${spotifyAccessToken}` }
+      });
+      const data = await res.json();
+      
+      const resultsContainer = document.getElementById('spotify-search-results');
+      resultsContainer.innerHTML = '';
+
+      data.tracks.items.forEach(track => {
+        const item = document.createElement('div');
+        item.className = 'bg-slate-950 border border-slate-800 p-2 rounded-lg flex justify-between items-center cursor-pointer hover:border-sky-500';
+        item.innerHTML = `
+          <div>
+            <div class="font-semibold text-sm">${track.name}</div>
+            <div class="text-xs text-slate-400">${track.artists.map(a => a.name).join(', ')}</div>
+          </div>
+          <button class="text-xs bg-sky-600 px-3 py-1 rounded">Play</button>
+        `;
+        item.onclick = () => playSpotifyTrack(track.uri, track.name, track.artists[0].name);
+        resultsContainer.appendChild(item);
+      });
+    }
+
+    async function playSpotifyTrack(uri, trackName, artistName) {
+      if (!spotifyDeviceId) return alert('Spotify Player is still connecting. Please click anywhere on the page and try again.');
+
+      // Activate element gesture
+      spotifyPlayer.activateElement();
+
+      await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${spotifyDeviceId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ uris: [uri] }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${spotifyAccessToken}`
+        }
+      });
+
+      document.getElementById('track-status').textContent = `Spotify: ${trackName} - ${artistName}`;
+      fetchLRCLyrics(trackName, artistName);
+    }
+  </script>
+</body>
+</html>
